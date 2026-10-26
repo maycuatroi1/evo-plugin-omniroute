@@ -383,7 +383,8 @@ class Plugin:
         else:
             parts.append("no spending limit on this key")
         connected = [str(item.get("provider")) for item in usage.get("providers") or [] if item.get("provider")]
-        parts.append(f"{len(connected)} provider quota(s)" + (f": {', '.join(connected)}" if connected else ""))
+        parts.append(f"{len(connected)} provider quota(s): {', '.join(connected)}" if connected
+                     else "no provider quota reported")
         return ", ".join(parts)
 
     @staticmethod

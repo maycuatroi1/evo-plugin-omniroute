@@ -25,7 +25,7 @@ holds the key. The page and the CLI reach the gateway through the plugin's route
 2. A hub admin installs the plugin from the Market, or from a release:
 
    ```sh
-   evo-agents hub plugin install --github maycuatroi1/evo-plugin-omniroute@v0.1.0 --trust
+   evo-agents hub plugin install --github maycuatroi1/evo-plugin-omniroute@v0.1.1 --trust
    ```
 
 3. Set the gateway, once for the whole hub (a hub admin) or per project (a project admin), and enable it:
