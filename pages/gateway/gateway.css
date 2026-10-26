@@ -1,0 +1,10 @@
+/* The few rules the hub's UI kit has no class for. */
+.reply-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+#capability {
+  width: auto;
+}

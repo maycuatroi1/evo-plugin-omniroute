@@ -1,18 +1,18 @@
 {
-  "id": "lumen-hello",
-  "name": "Lumen hello",
-  "description": "The sample plugin of evo-plugin-template: a page where members leave a wave, a route and an MCP tool that greets by name.",
+  "id": "omniroute",
+  "name": "OmniRoute",
+  "description": "Connects a project to an OmniRoute AI gateway: agents list its models and ask one through MCP tools; members see its state, the key's usage and its models on a page and from the CLI.",
   "industries": ["software-outsourcing"],
-  "categories": ["messaging"],
-  "repo": "maycuatroi1/evo-plugin-template",
+  "categories": ["ai"],
+  "repo": "maycuatroi1/evo-plugin-omniroute",
   "publisher": {
-    "id": "lumen",
-    "name": "Lumen Labs",
-    "signer": "sigstore:maycuatroi1/evo-plugin-template/.github/workflows/ci.yml"
+    "id": "maycuatroi1",
+    "name": "maycuatroi1",
+    "signer": "sigstore:maycuatroi1/evo-plugin-omniroute/.github/workflows/ci.yml"
   },
   "tier": "isolated",
   "price": {"kind": "free"},
-  "icon": "message-square",
-  "homepage": "https://github.com/maycuatroi1/evo-plugin-template",
+  "icon": "workflow",
+  "homepage": "https://github.com/maycuatroi1/evo-plugin-omniroute",
   "license": "Apache-2.0"
 }

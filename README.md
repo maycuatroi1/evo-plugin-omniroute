@@ -1,114 +1,76 @@
-# evo-plugin-template
+# evo-plugin-omniroute
 
-A GitHub template for an [evo-agents](https://github.com/maycuatroi1/evo-agents) plugin that a hub installs from a
-signed GitHub Release and that a market lists. It holds a sample plugin that runs as it is, `lumen-hello` of the
-fictional publisher `lumen`, and the CI that tests, signs and releases it.
+An [evo-agents](https://github.com/maycuatroi1/evo-agents) hub plugin that connects a project to an
+[OmniRoute](https://github.com/cheaper-inference/OmniRoute) AI gateway you run: one OpenAI-compatible endpoint in front
+of many model providers, with combos such as `auto` that pick a model per request.
 
-`lumen-hello` is an isolated plugin, run by the hub in a process of its own:
+Once a project enables it:
 
-- `evo-plugin.json`: the manifest (plugin-v1): id, version, publisher, `tier: isolated`, `plugin_api: 1`, a config
-  field `greeting`, and what it contributes;
-- `backend/main.py`: a backend in Python's standard library that speaks plugin/1 on stdin and stdout;
-- a route, `GET|POST /v1/x/lumen-hello/<project>/waves`: the project's greeting and the waves its members left;
-- an MCP tool, `lumen-hello__greet`: greets someone by name;
-- a page, `pages/hello/index.html`, on the hub's UI kit (`/v1/plugin-ui/kit/1/evo-ui.css` and `evo-ui.js`), its words
-  in English and Vietnamese under `pages/hello/i18n/`;
-- `tests/test_plugin.py`: tests of the backend over plugin/1 and of the files the hub reads;
-- `market-entry.json`: the plugin's entry for a market's `market.json` (plugin-market-v1).
+- **Agents** of the project get three MCP tools on the hub's `/mcp`:
+  - `omniroute__models` lists the gateway's models and combos, filtered by a word or a capability;
+  - `omniroute__ask` sends one question to a model and answers its reply with the model that answered and the tokens
+    it used, for a second opinion, a translation or a cheap summary;
+  - `omniroute__usage` says what the key spent today and this week against its limits.
+- **Members** get the page *OmniRoute* in the project's menu: the gateway's state, latency and model count, the key's
+  usage, a searchable table of models and a box to ask one of them.
+- **The CLI** gets `evo-agents hub omniroute status|models|ask --project <project>`.
 
-The protocol, the page bridge and the UI kit are described in
-[docs/plugins.md](https://github.com/maycuatroi1/evo-agents/blob/main/docs/plugins.md) of evo-agents; the market and
-selling in [docs/market.md](https://github.com/maycuatroi1/evo-agents/blob/main/docs/market.md).
+The plugin is isolated: the hub runs its backend in a process of its own, and the backend is the only part that
+holds the key. The page and the CLI reach the gateway through the plugin's routes, never with the key.
 
-## Make your own plugin
+## Set it up
 
-1. Create a repository from the template and clone it:
-
-   ```sh
-   gh repo create OWNER/NAME --template maycuatroi1/evo-plugin-template --public --clone
-   ```
-
-2. Rename the id, the publisher and the signer as [docs/rename.md](docs/rename.md) says, then write the plugin.
-3. Check it on your machine, with evo-ak installed (`pip install evo-ak`):
+1. In OmniRoute's dashboard, open **API Manager** and create a key for the hub. Turn on its **usage command** if the
+   plugin should show usage. A key with spending limits keeps a project's agents within a budget.
+2. A hub admin installs the plugin from the Market, or from a release:
 
    ```sh
-   python -m unittest discover -s tests -v   # the plugin's own tests
-   evo-agents plugin test .                  # the conformance checks a hub relies on
-   evo-agents plugin pack . --output /tmp/bundle.tar.gz
+   evo-agents hub plugin install --github maycuatroi1/evo-plugin-omniroute@v0.1.0 --trust
    ```
 
-   `plugin pack .` packs every file of the directory but `.git`, `__pycache__` and `*.pyc`, so pack to a path
-   outside the checkout and keep build outputs and virtual environments out of it.
-4. Push `main`. The CI tests and packs on every push and pull request, and signs the bundle on `main`.
-5. Release a version: raise `version` in `evo-plugin.json`, then tag it with that version and push the tag.
+3. Set the gateway, once for the whole hub (a hub admin) or per project (a project admin), and enable it:
 
    ```sh
-   git tag v0.1.0 && git push origin v0.1.0
+   evo-agents hub plugin config omniroute --instance --set base_url=https://omniroute.example.com
+   printf %s "$OMNIROUTE_API_KEY" | evo-agents hub plugin config omniroute --instance --secret api_key
+   evo-agents hub plugin enable omniroute --project northwind
+   evo-agents hub omniroute status --project northwind
    ```
 
-   The CI fails when the tag is not `v` plus the manifest's version. For a free plugin it makes the GitHub Release
-   with `ID-0.1.0.tar.gz` and its Sigstore signature `ID-0.1.0.tar.gz.sigstore.json`.
+A project's layer overrides the hub's field by field, so one project can point at another gateway or another key.
 
-## The CI
-
-`.github/workflows/ci.yml` installs evo-ak from the nightly tag of evo-agents and runs four jobs:
-
-| Job | When | What |
+| Field | Default | What |
 | --- | --- | --- |
-| `test` | every push and pull request | unit tests, `evo-agents plugin test .`, the market entry against plugin-market-v1, `plugin pack` |
-| `sign` | `main` and tags `v*` | packs again, checks the bytes are the tested ones, signs keyless with Sigstore, checks the signature as a hub does |
-| `release` | tags `v*`, free plugins | the GitHub Release of the tag with the bundle and its signature |
-| `publish-seller` | tags `v*`, when the variable `EVO_SELLER_PUBLISH` is `true` | uploads the signed bundle to the seller's hub instead of a public release |
+| `base_url` | | The gateway's root, `https://...`, without `/v1` |
+| `api_key` | | The OmniRoute key, sealed by the hub and never shown again |
+| `default_model` | `auto` | The model a question goes to when it names none |
+| `max_tokens` | `1024` | The most tokens one answer may take |
+| `ask_role` | `writer` | The lowest project role that may ask from the page and the CLI |
 
-The signature names this workflow, `sigstore:OWNER/REPO/.github/workflows/ci.yml`, as the signer. Signing needs no
-secret: the run's GitHub OIDC token is the only credential. Keyless signing writes the certificate to Sigstore's public
-transparency log, so the repository's name, the workflow, the ref and the commit become public, even for a private
-repository.
+The hub gives a plugin call 30 seconds, so a question must be answered within 25: pick fast models or combos for
+`omniroute__ask`, and leave long work to the project's runs.
 
-## Install it on a hub
+## Security
 
-A hub admin installs a release straight from GitHub. The first install of a publisher asks the admin to trust its
-signer; `--trust` confirms it:
+- The backend reaches only `https` URLs whose host resolves to public addresses, checked at every call and pinned for
+  the connection, so a project's config cannot point it at the hub's own network. It follows no redirect.
+- The key goes only in the `Authorization` header to the gateway; no answer, log line or error carries it.
+- The plugin asks for no permission of the hub: it reads no run, plan, chat or memory.
+- Everything a question holds goes to your gateway and from there to the provider of the model it picks.
 
-```sh
-evo-agents hub plugin install --github OWNER/NAME@v0.1.0 --trust
-```
+## Develop
 
-The hub downloads the release's bundle and signature, checks that `sigstore:OWNER/NAME/.github/workflows/ci.yml`
-signed them for the manifest's publisher, records the publisher as trusted, and installs the version. A project's
-admin then enables it for the project (`evo-agents hub plugin enable ID --project PROJECT`), and its page shows in the
-project's menu.
-
-## List it on a market
-
-**Free plugin.** Open a pull request on the market's index, by default
-[maycuatroi1/evo-agents-market](https://github.com/maycuatroi1/evo-agents-market), that adds your `market-entry.json`
-to the `plugins` of its `market.json`, as that repository's `CONTRIBUTING.md` says. Check it first:
+Standard library only, Python 3.12, with evo-ak installed (`pip install evo-ak`):
 
 ```sh
-evo-agents plugin market-check market.json --releases
+python -m unittest discover -s tests -v   # the backend against a fake OmniRoute, and the files the hub reads
+evo-agents plugin test .                  # the plugin/1 conformance checks a hub relies on
+evo-agents plugin pack . --output /tmp/omniroute.tar.gz
 ```
 
-`--releases` downloads your latest release and checks that its bundle and signature match the entry.
-
-**Paid plugin.** The plugin is sold per hub per month through a seller's hub, such as
-[agents.omelet.tech](https://agents.omelet.tech), which keeps the bundle and serves it only to a hub that holds a
-licence; it makes no public release.
-
-1. On the seller's hub, signed in with GitHub, add the listing:
-
-   ```sh
-   evo-agents hub market listing add ID --publisher PUBLISHER \
-     --signer sigstore:OWNER/NAME/.github/workflows/ci.yml --usd 49
-   ```
-
-2. In the repository's settings, create the environment `seller` with the secrets `EVO_SELLER_URL` (the seller's
-   hub), `EVO_SELLER_LOGIN` and `EVO_SELLER_TOKEN` (a machine token of the account that owns the listing), and set
-   the repository variable `EVO_SELLER_PUBLISH` to `true`. Every tag `v*` then uploads its signed bundle to the seller
-   instead of a GitHub Release.
-3. Set `price` in `market-entry.json` to `{"kind": "subscription", "usd_per_hub_month": 49, "seller": "omelet"}` and
-   open the pull request on the market's index.
+The CI (`.github/workflows/ci.yml`) runs the same on every push, signs the bundle keyless with Sigstore on `main`, and
+on a tag `vX.Y.Z` that matches `version` in `evo-plugin.json` makes the GitHub Release a hub installs from.
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). OmniRoute is a separate project under its own license.
