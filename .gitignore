@@ -1,0 +1,9 @@
+# Everything in this directory but what is ignored here goes into the bundle `evo-agents plugin pack .` writes, so
+# build outputs and environments stay out of it: pack into a directory outside the checkout, as the CI does.
+dist/
+*.tar.gz
+*.sigstore.json
+*.sig.json
+.venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,58 @@
+{
+  "id": "lumen-hello",
+  "version": "0.1.0",
+  "publisher": "lumen",
+  "name": "Lumen hello",
+  "description": "The sample plugin of evo-plugin-template: a greeting a project's admin sets, a page where members leave a wave, a route that reads and records the waves, and an MCP tool that greets someone by name.",
+  "tier": "isolated",
+  "engines": {"evo-agents": ">=0.47"},
+  "plugin_api": 1,
+  "permissions": [],
+  "config": {
+    "type": "object",
+    "properties": {
+      "greeting": {
+        "type": "string",
+        "title": "Greeting",
+        "description": "The word the page and the tool greet with.",
+        "default": "Hello",
+        "maxLength": 40
+      }
+    }
+  },
+  "backend": {"runtime": "python", "entry": "backend/main.py"},
+  "contributes": {
+    "routes": [
+      {
+        "name": "waves",
+        "title": "Waves",
+        "description": "GET answers the project's greeting and its latest waves; POST records a wave, {\"name\": \"...\"}.",
+        "methods": ["GET", "POST"]
+      }
+    ],
+    "mcp_tools": [
+      {
+        "name": "greet",
+        "title": "Greet someone",
+        "description": "Greets someone by name with the greeting the project set, and says how many waves the project's page holds.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string", "minLength": 1, "maxLength": 80, "description": "Who to greet."}
+          },
+          "required": ["name"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "pages": [
+      {
+        "name": "hello",
+        "title": "Hello",
+        "description": "The project's greeting and the waves its members left.",
+        "icon": "message-square",
+        "entry": "pages/hello/index.html"
+      }
+    ]
+  }
+}

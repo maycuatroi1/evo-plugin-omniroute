@@ -1,0 +1,18 @@
+{
+  "id": "lumen-hello",
+  "name": "Lumen hello",
+  "description": "The sample plugin of evo-plugin-template: a page where members leave a wave, a route and an MCP tool that greets by name.",
+  "industries": ["software-outsourcing"],
+  "categories": ["messaging"],
+  "repo": "maycuatroi1/evo-plugin-template",
+  "publisher": {
+    "id": "lumen",
+    "name": "Lumen Labs",
+    "signer": "sigstore:maycuatroi1/evo-plugin-template/.github/workflows/ci.yml"
+  },
+  "tier": "isolated",
+  "price": {"kind": "free"},
+  "icon": "message-square",
+  "homepage": "https://github.com/maycuatroi1/evo-plugin-template",
+  "license": "Apache-2.0"
+}

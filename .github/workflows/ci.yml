@@ -1,0 +1,242 @@
+# CI of an evo-agents plugin made from evo-plugin-template.
+#
+# - test, on every push and pull request: the plugin's own tests, `evo-agents plugin test .` (the conformance checks a
+#   hub relies on), the market entry against plugin-market-v1, and the deterministic bundle `evo-agents plugin pack`
+#   writes, whose file name and SHA-256 it passes on.
+# - sign, on main and on a tag v*: packs again, fails unless the bytes are the ones test packed, and signs them keyless
+#   with Sigstore under this workflow's own GitHub OIDC identity, sigstore:OWNER/REPO/.github/workflows/ci.yml, the
+#   signer a hub checks (`evo-agents hub plugin install --github OWNER/REPO` trusts that one by default). It is the
+#   only job with id-token: write, and it runs none of the plugin's code.
+# - release, on a tag vX.Y.Z of a free plugin: the GitHub Release of the tag with the bundle ID-X.Y.Z.tar.gz and its
+#   signature ID-X.Y.Z.tar.gz.sigstore.json, which a hub installs from and a market's index points at.
+# - publish-seller, on a tag of a paid plugin, in place of release: uploads the signed bundle to the seller's hub,
+#   which serves it only to hubs that hold a licence. It runs only when the repository variable EVO_SELLER_PUBLISH is
+#   true, in the GitHub Environment seller, whose secrets the repository's owner sets: EVO_SELLER_URL (the seller's
+#   hub, such as https://agents.omelet.tech), EVO_SELLER_LOGIN and EVO_SELLER_TOKEN (a machine token of the account
+#   that owns the listing). Nothing of a hub is stored in the repository.
+#
+# Keyless signing records the certificate in Sigstore's public transparency log (Rekor): the repository's name, this
+# workflow's path, the ref, the commit and the run become public there, even for a private repository.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash # with -eo pipefail, which an unnamed shell lacks
+
+env:
+  # evo-ak from the nightly tag of evo-agents, as the harnesses' CI installs it: the newest commit of main whose CI
+  # passed. Pin a release (evo-ak==X.Y.Z) instead when the plugin must build the same way every time.
+  EVO_AK: evo-ak @ git+https://github.com/maycuatroi1/evo-agents@nightly
+  SIGSTORE: sigstore==4.5.0
+  PYTHON: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      bundle: ${{ steps.pack.outputs.bundle }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # A standalone Python from uv: on a self-hosted runner setup-python's build needs LD_LIBRARY_PATH, which the
+      # plugin host leaves out of a backend's environment on purpose (docs/plugins.md of evo-agents, Signing in CI).
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Python
+        run: |
+          uv venv --seed --python "$PYTHON" "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+      - name: Install evo-ak
+        run: python -m pip install --disable-pip-version-check "$EVO_AK"
+      - name: The plugin's tests
+        run: python -m unittest discover -s tests -v
+      - name: plugin/1 conformance
+        run: evo-agents plugin test .
+      - name: The market entry against plugin-market-v1
+        run: |
+          python - "$RUNNER_TEMP/market.json" <<'EOF'
+          import json, sys
+          entry = json.load(open("market-entry.json", encoding="utf-8"))
+          index = {"schema": "plugin-market-v1", "name": "entry-check", "owner": {"name": entry["publisher"]["id"]}, "plugins": [entry]}
+          json.dump(index, open(sys.argv[1], "w", encoding="utf-8"))
+          EOF
+          evo-agents plugin market-check "$RUNNER_TEMP/market.json"
+      - name: The tag names the manifest's version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(python -c 'import json; print(json.load(open("evo-plugin.json"))["version"])')
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but evo-plugin.json says version $version: tag it v$version"
+            exit 1
+          fi
+      # Out of the checkout: every file in it goes into the bundle.
+      - name: Pack
+        id: pack
+        run: |
+          find . -name __pycache__ -prune -exec rm -rf {} +
+          mkdir -p "$RUNNER_TEMP/dist"
+          id=$(python -c 'import json; m = json.load(open("evo-plugin.json")); print(m["id"] + "-" + m["version"] + ".tar.gz")')
+          evo-agents plugin pack . --output "$RUNNER_TEMP/dist/$id"
+          sha256=$(sha256sum "$RUNNER_TEMP/dist/$id" | cut -d' ' -f1)
+          echo "bundle=$id" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          echo "### Bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$id\` sha256 \`$sha256\`" >> "$GITHUB_STEP_SUMMARY"
+
+  sign:
+    needs: test
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # the OIDC token Sigstore's Fulcio turns into this workflow's signing certificate
+    env:
+      BUNDLE: ${{ needs.test.outputs.bundle }}
+      TESTED: ${{ needs.test.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Python
+        run: |
+          uv venv --seed --python "$PYTHON" "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+      - name: Install evo-ak and sigstore
+        run: python -m pip install --disable-pip-version-check "$EVO_AK" "$SIGSTORE"
+      # Packing is deterministic: the same files give the same bytes, so this signs what the test job tested.
+      - name: Pack
+        run: |
+          evo-agents plugin pack . --output "$RUNNER_TEMP/$BUNDLE"
+          mkdir -p dist-signed
+          mv "$RUNNER_TEMP/$BUNDLE" "dist-signed/$BUNDLE"
+          sha256=$(sha256sum "dist-signed/$BUNDLE" | cut -d' ' -f1)
+          if [ "$sha256" != "$TESTED" ]; then
+            echo "::error::$BUNDLE is $sha256, the test job packed $TESTED"
+            exit 1
+          fi
+      - name: Sign with Sigstore
+        run: python -m sigstore sign "dist-signed/$BUNDLE"
+      - name: Check the signature as a hub does
+        run: |
+          publisher=$(python -c 'import json; print(json.load(open("evo-plugin.json"))["publisher"])')
+          entry="$publisher=sigstore:${GITHUB_WORKFLOW_REF%%@*}"
+          python scripts/check_signature.py "dist-signed/$BUNDLE" --publishers "$entry" | tee "$RUNNER_TEMP/check.txt"
+          {
+            echo "### Signed bundle"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/check.txt"
+            echo '```'
+            echo
+            echo "Hub entry: \`EVO_HUB_PLUGIN_PUBLISHERS=$entry\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bundle
+          path: |
+            dist-signed/${{ needs.test.outputs.bundle }}
+            dist-signed/${{ needs.test.outputs.bundle }}.sigstore.json
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    needs: [test, sign]
+    # A paid plugin's bundle is no public release: its seller's hub keeps it (publish-seller).
+    if: startsWith(github.ref, 'refs/tags/v') && vars.EVO_SELLER_PUBLISH != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the release of the tag and its assets
+    env:
+      BUNDLE: ${{ needs.test.outputs.bundle }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: bundle
+          path: dist/
+      - name: GitHub Release
+        run: |
+          files=("dist/$BUNDLE" "dist/$BUNDLE.sigstore.json")
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Install on a hub: \`evo-agents hub plugin install --github $GITHUB_REPOSITORY@$GITHUB_REF_NAME\`. Signed keyless by \`sigstore:$GITHUB_REPOSITORY/.github/workflows/ci.yml\`."
+          fi
+          echo "Released \`$BUNDLE\` on $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-seller:
+    needs: [test, sign]
+    # Skipped until the owner sets the repository variable EVO_SELLER_PUBLISH to true; see the top.
+    if: startsWith(github.ref, 'refs/tags/v') && vars.EVO_SELLER_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: seller # its reviewers and the seller's secrets live here
+    permissions:
+      contents: read
+    env:
+      BUNDLE: ${{ needs.test.outputs.bundle }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: bundle
+          path: dist-signed/
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Python
+        run: |
+          uv venv --seed --python "$PYTHON" "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+      - name: Install evo-ak
+        run: python -m pip install --disable-pip-version-check "$EVO_AK"
+      # The hub CLI reads its login from EVO_HUB_HOME; a directory of this run's own keeps the token out of the
+      # runner's home, and the last step removes it whatever happened.
+      - name: Seller credentials
+        env:
+          EVO_SELLER_URL: ${{ secrets.EVO_SELLER_URL }}
+          EVO_SELLER_LOGIN: ${{ secrets.EVO_SELLER_LOGIN }}
+          EVO_SELLER_TOKEN: ${{ secrets.EVO_SELLER_TOKEN }}
+        run: |
+          for name in EVO_SELLER_URL EVO_SELLER_LOGIN EVO_SELLER_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::the environment seller has no secret $name"
+              exit 1
+            fi
+          done
+          umask 077
+          mkdir -p "$RUNNER_TEMP/seller-hub"
+          python -c 'import json, os; print(json.dumps({"url": os.environ["EVO_SELLER_URL"], "login": os.environ["EVO_SELLER_LOGIN"]}))' > "$RUNNER_TEMP/seller-hub/config.json"
+          printf '%s\n' "$EVO_SELLER_TOKEN" > "$RUNNER_TEMP/seller-hub/token"
+      - name: Upload the bundle to the seller
+        run: |
+          id=$(python -c 'import json; print(json.load(open("evo-plugin.json"))["id"])')
+          EVO_HUB_HOME="$RUNNER_TEMP/seller-hub" evo-agents hub market bundle upload "$id" "dist-signed/$BUNDLE" \
+            --signature "dist-signed/$BUNDLE.sigstore.json"
+      - name: Remove the seller credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/seller-hub"

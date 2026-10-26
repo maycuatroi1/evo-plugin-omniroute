@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello</title>
+    <!-- The hub's UI kit 1: its tokens and components in both themes, and window.evo, the bridge evo-plugin/1. -->
+    <link rel="stylesheet" href="/v1/plugin-ui/kit/1/evo-ui.css" />
+    <script src="/v1/plugin-ui/kit/1/evo-ui.js"></script>
+    <script src="hello.js" defer></script>
+  </head>
+  <body>
+    <main class="evo-stack">
+      <section class="evo-card evo-stack">
+        <h1 class="evo-card-title" id="greeting"></h1>
+        <p class="evo-muted" data-i18n="intro"></p>
+        <form class="evo-row" id="wave">
+          <input class="evo-input" id="name" name="name" maxlength="80" required autocomplete="off" />
+          <button class="evo-btn evo-btn-primary" type="submit" data-i18n="wave"></button>
+        </form>
+      </section>
+      <div class="evo-table-wrap">
+        <table class="evo-table" id="waves">
+          <thead>
+            <tr>
+              <th data-i18n="who"></th>
+              <th class="evo-hide-sm" data-i18n="when"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="evo-empty" id="empty" hidden><p class="evo-empty-title" data-i18n="empty"></p></div>
+    </main>
+  </body>
+</html>
