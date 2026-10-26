@@ -17,6 +17,7 @@ evo.messages("vi", {
   usage_week: "tuần này {spent} trên {limit}",
   usage_unlimited: "key này không đặt hạn mức chi",
   usage_providers: "quota của {count} provider: {names}",
+  usage_no_providers: "chưa có provider nào báo quota",
   ask_title: "Hỏi một model",
   prompt: "Câu hỏi",
   prompt_hint: "Bạn muốn model trả lời gì?",

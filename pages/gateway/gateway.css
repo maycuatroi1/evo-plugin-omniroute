@@ -8,3 +8,7 @@
 #capability {
   width: auto;
 }
+/* The kit's layout classes set display, which would show an element its hidden attribute hides. */
+[hidden] {
+  display: none !important;
+}

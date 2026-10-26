@@ -47,7 +47,11 @@
     var providers = (usage.providers || []).map(function (item) {
       return item.provider;
     });
-    parts.push(evo.t("usage_providers", { count: providers.length, names: providers.join(", ") || "-" }));
+    parts.push(
+      providers.length
+        ? evo.t("usage_providers", { count: providers.length, names: providers.join(", ") })
+        : evo.t("usage_no_providers")
+    );
     return parts.join(" – ");
   }
 
@@ -129,7 +133,7 @@
   }
 
   function loadModels() {
-    var query = { limit: "200" };
+    var query = { limit: "50" };
     var word = $("q").value.trim();
     var capability = $("capability").value;
     if (word) query.q = word;

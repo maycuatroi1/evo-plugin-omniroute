@@ -1,6 +1,6 @@
 {
   "id": "omniroute",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "maycuatroi1",
   "name": "OmniRoute",
   "description": "Connects a project to an OmniRoute AI gateway: the project's agents list the gateway's models and ask one of them through MCP tools, and members check the gateway, its models and the key's usage on a page and from the CLI.",

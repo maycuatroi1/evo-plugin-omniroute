@@ -17,6 +17,7 @@ evo.messages("en", {
   usage_week: "this week {spent} of {limit}",
   usage_unlimited: "no spending limit on this key",
   usage_providers: "{count} provider quota(s): {names}",
+  usage_no_providers: "no provider quota reported",
   ask_title: "Ask a model",
   prompt: "Question",
   prompt_hint: "What should the model answer?",
