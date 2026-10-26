@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmniRoute</title>
+    <!-- The hub's UI kit 1: its tokens and components in both themes, and window.evo, the bridge evo-plugin/1. -->
+    <link rel="stylesheet" href="/v1/plugin-ui/kit/1/evo-ui.css" />
+    <script src="/v1/plugin-ui/kit/1/evo-ui.js"></script>
+    <link rel="stylesheet" href="gateway.css" />
+    <script src="gateway.js" defer></script>
+  </head>
+  <body>
+    <main class="evo-stack">
+      <section class="evo-card evo-stack" aria-labelledby="gateway-title">
+        <div class="evo-row evo-row-between">
+          <h1 class="evo-card-title" id="gateway-title" data-i18n="title"></h1>
+          <div class="evo-row">
+            <span class="evo-badge" id="state" aria-live="polite"></span>
+            <button class="evo-btn evo-btn-secondary evo-btn-sm" type="button" id="refresh" data-i18n="refresh"></button>
+          </div>
+        </div>
+        <p class="evo-muted" id="problem" hidden></p>
+        <div class="evo-grid" id="facts" hidden>
+          <div class="evo-field">
+            <span class="evo-label" data-i18n="url"></span>
+            <span class="evo-mono evo-truncate" id="url"></span>
+          </div>
+          <div class="evo-field">
+            <span class="evo-label" data-i18n="latency"></span>
+            <span id="latency"></span>
+          </div>
+          <div class="evo-field">
+            <span class="evo-label" data-i18n="models_count"></span>
+            <span id="models-count"></span>
+          </div>
+          <div class="evo-field">
+            <span class="evo-label" data-i18n="default_model"></span>
+            <span class="evo-mono evo-truncate" id="default-model"></span>
+          </div>
+        </div>
+        <div class="evo-field" id="usage-field" hidden>
+          <span class="evo-label" data-i18n="usage"></span>
+          <span id="usage"></span>
+        </div>
+      </section>
+
+      <section class="evo-card evo-stack" id="ask-card" aria-labelledby="ask-title" hidden>
+        <h2 class="evo-card-title" id="ask-title" data-i18n="ask_title"></h2>
+        <form class="evo-stack" id="ask">
+          <div class="evo-field">
+            <label class="evo-label" for="prompt" data-i18n="prompt"></label>
+            <textarea class="evo-input" id="prompt" name="prompt" rows="4" maxlength="60000" required></textarea>
+          </div>
+          <div class="evo-field">
+            <label class="evo-label" for="model" data-i18n="model"></label>
+            <input class="evo-input evo-mono" id="model" name="model" maxlength="200" list="model-ids" autocomplete="off" />
+            <datalist id="model-ids"></datalist>
+            <span class="evo-hint" data-i18n="model_hint"></span>
+          </div>
+          <div class="evo-row evo-row-end">
+            <button class="evo-btn evo-btn-primary" type="submit" id="send" data-i18n="send"></button>
+          </div>
+        </form>
+        <div class="evo-stack-sm" id="reply" hidden aria-live="polite">
+          <span class="evo-label" data-i18n="reply"></span>
+          <p class="reply-text" id="reply-text"></p>
+          <span class="evo-hint" id="reply-meta"></span>
+        </div>
+      </section>
+
+      <section class="evo-card evo-stack" id="models-card" aria-labelledby="models-title" hidden>
+        <div class="evo-row evo-row-between">
+          <h2 class="evo-card-title" id="models-title" data-i18n="models_title"></h2>
+          <span class="evo-hint" id="models-total"></span>
+        </div>
+        <form class="evo-row" id="filter" role="search">
+          <label class="evo-sr-only" for="q" data-i18n="search"></label>
+          <input class="evo-input evo-grow" id="q" name="q" maxlength="100" autocomplete="off" />
+          <label class="evo-sr-only" for="capability" data-i18n="capability"></label>
+          <select class="evo-input" id="capability" name="capability">
+            <option value="" data-i18n="any_capability"></option>
+            <option value="vision" data-i18n="vision"></option>
+            <option value="tool_calling" data-i18n="tool_calling"></option>
+            <option value="reasoning" data-i18n="reasoning"></option>
+          </select>
+          <button class="evo-btn evo-btn-secondary" type="submit" data-i18n="search"></button>
+        </form>
+        <div class="evo-table-wrap">
+          <table class="evo-table" id="models">
+            <thead>
+              <tr>
+                <th data-i18n="model_id"></th>
+                <th class="evo-hide-sm" data-i18n="context"></th>
+                <th class="evo-hide-sm" data-i18n="capabilities"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="evo-empty" id="models-empty" hidden><p class="evo-empty-title" data-i18n="no_models"></p></div>
+      </section>
+    </main>
+  </body>
+</html>

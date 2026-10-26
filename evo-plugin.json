@@ -1,9 +1,9 @@
 {
-  "id": "lumen-hello",
+  "id": "omniroute",
   "version": "0.1.0",
-  "publisher": "lumen",
-  "name": "Lumen hello",
-  "description": "The sample plugin of evo-plugin-template: a greeting a project's admin sets, a page where members leave a wave, a route that reads and records the waves, and an MCP tool that greets someone by name.",
+  "publisher": "maycuatroi1",
+  "name": "OmniRoute",
+  "description": "Connects a project to an OmniRoute AI gateway: the project's agents list the gateway's models and ask one of them through MCP tools, and members check the gateway, its models and the key's usage on a page and from the CLI.",
   "tier": "isolated",
   "engines": {"evo-agents": ">=0.47"},
   "plugin_api": 1,
@@ -11,12 +11,41 @@
   "config": {
     "type": "object",
     "properties": {
-      "greeting": {
+      "base_url": {
         "type": "string",
-        "title": "Greeting",
-        "description": "The word the page and the tool greet with.",
-        "default": "Hello",
-        "maxLength": 40
+        "title": "Gateway URL",
+        "description": "The root of the OmniRoute instance, such as https://omniroute.example.com, without /v1. Only https, on a host whose every address is public.",
+        "maxLength": 300,
+        "pattern": "^https://[^\\s/?#]+(/[^\\s?#]*)?$"
+      },
+      "api_key": {
+        "type": "string",
+        "title": "API key",
+        "description": "An OmniRoute API key made for this hub in the gateway's dashboard (API Manager). Turn on its usage command to show usage.",
+        "maxLength": 500,
+        "x-secret": true
+      },
+      "default_model": {
+        "type": "string",
+        "title": "Default model",
+        "description": "The model a question goes to when it names none: a model id of the gateway, or a combo such as auto.",
+        "default": "auto",
+        "maxLength": 200
+      },
+      "max_tokens": {
+        "type": "integer",
+        "title": "Answer length",
+        "description": "The most tokens one answer may take, unless the question asks for fewer.",
+        "default": 1024,
+        "minimum": 16,
+        "maximum": 16384
+      },
+      "ask_role": {
+        "type": "string",
+        "title": "Who may ask",
+        "description": "The lowest project role whose members may ask a model from the page and the CLI; agents ask through the MCP tool.",
+        "enum": ["reader", "writer", "admin"],
+        "default": "writer"
       }
     }
   },
@@ -24,34 +53,103 @@
   "contributes": {
     "routes": [
       {
-        "name": "waves",
-        "title": "Waves",
-        "description": "GET answers the project's greeting and its latest waves; POST records a wave, {\"name\": \"...\"}.",
-        "methods": ["GET", "POST"]
+        "name": "status",
+        "title": "Gateway status",
+        "description": "GET answers whether the project's gateway is set, reachable and accepts the key, with its latency, the number of models and the key's usage.",
+        "methods": ["GET"]
+      },
+      {
+        "name": "models",
+        "title": "Models",
+        "description": "GET lists the gateway's models; query q (a word of the id), capability (vision, tool_calling, reasoning) and limit (1 to 500).",
+        "methods": ["GET"]
+      },
+      {
+        "name": "ask",
+        "title": "Ask a model",
+        "description": "POST {\"prompt\": \"...\", \"model\", \"system\", \"max_tokens\"} sends one question to the gateway and answers the model's reply with its usage.",
+        "methods": ["POST"]
       }
     ],
     "mcp_tools": [
       {
-        "name": "greet",
-        "title": "Greet someone",
-        "description": "Greets someone by name with the greeting the project set, and says how many waves the project's page holds.",
+        "name": "models",
+        "title": "List the gateway's models",
+        "description": "Lists the models and combos the project's OmniRoute gateway serves, optionally only those whose id holds a word or that have a capability. Use it to pick a model for omniroute__ask.",
         "input_schema": {
           "type": "object",
           "properties": {
-            "name": {"type": "string", "minLength": 1, "maxLength": 80, "description": "Who to greet."}
+            "query": {"type": "string", "maxLength": 100, "description": "A word the model id must contain, such as gemini or sonnet."},
+            "capability": {"type": "string", "enum": ["vision", "tool_calling", "reasoning"], "description": "Only models with this capability."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50, "description": "At most this many models."}
           },
-          "required": ["name"],
           "additionalProperties": false
         }
+      },
+      {
+        "name": "ask",
+        "title": "Ask a model through the gateway",
+        "description": "Sends one question to a model of the project's OmniRoute gateway and answers its reply, with the model that answered and the tokens it used. Good for a second opinion, a translation or a cheap summary; the answer must come within 25 seconds.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "prompt": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "The question or the text to work on."},
+            "model": {"type": "string", "maxLength": 200, "description": "A model id from omniroute__models; the project's default model when left out."},
+            "system": {"type": "string", "maxLength": 8000, "description": "Instructions the model reads before the prompt."},
+            "max_tokens": {"type": "integer", "minimum": 16, "maximum": 16384, "description": "The most tokens the answer may take."}
+          },
+          "required": ["prompt"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "usage",
+        "title": "The gateway key's usage",
+        "description": "Says what the project's OmniRoute key spent today and this week against its limits, and the quota each provider connection reports, when the key's usage command is on.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+      }
+    ],
+    "cli": [
+      {
+        "name": "status",
+        "help": "whether the project's OmniRoute gateway is set, reachable and accepts its key",
+        "http": {"method": "GET", "path": "status"},
+        "project": true,
+        "output": {"render": "text"}
+      },
+      {
+        "name": "models",
+        "help": "the models of the project's OmniRoute gateway",
+        "http": {"method": "GET", "path": "models"},
+        "project": true,
+        "args": [
+          {"name": "q", "type": "string", "in": "query", "positional": true, "help": "a word the model id must contain", "metavar": "WORD"},
+          {"name": "capability", "type": "string", "in": "query", "choices": ["vision", "tool_calling", "reasoning"], "help": "only models with this capability"},
+          {"name": "limit", "type": "integer", "in": "query", "default": 100, "help": "at most this many models"}
+        ],
+        "output": {"render": "text"}
+      },
+      {
+        "name": "ask",
+        "help": "send one question to a model of the project's OmniRoute gateway",
+        "http": {"method": "POST", "path": "ask"},
+        "project": true,
+        "args": [
+          {"name": "prompt", "type": "string", "in": "body", "positional": true, "required": true, "help": "the question"},
+          {"name": "model", "type": "string", "in": "body", "help": "a model id; the project's default model when left out"},
+          {"name": "system", "type": "string", "in": "body", "help": "instructions the model reads first"},
+          {"name": "max_tokens", "type": "integer", "in": "body", "help": "the most tokens the answer may take"}
+        ],
+        "output": {"render": "text"}
       }
     ],
     "pages": [
       {
-        "name": "hello",
-        "title": "Hello",
-        "description": "The project's greeting and the waves its members left.",
-        "icon": "message-square",
-        "entry": "pages/hello/index.html"
+        "name": "gateway",
+        "title": "OmniRoute",
+        "description": "The project's OmniRoute gateway: its state, the key's usage, its models and a box to ask one of them.",
+        "icon": "workflow",
+        "entry": "pages/gateway/index.html"
       }
     ]
   }

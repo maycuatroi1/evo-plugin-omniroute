@@ -1,8 +1,8 @@
 """Check a signed plugin bundle the way a hub does before it records it: the signature beside the bundle, against the
 publishers an operator would list in EVO_HUB_PLUGIN_PUBLISHERS.
 
-    python scripts/check_signature.py dist/lumen-hello-0.1.0.tar.gz \
-        --publishers "lumen=sigstore:OWNER/REPO/.github/workflows/ci.yml"
+    python scripts/check_signature.py dist/omniroute-0.1.0.tar.gz \
+        --publishers "maycuatroi1=sigstore:maycuatroi1/evo-plugin-omniroute/.github/workflows/ci.yml"
 
 The signature is BUNDLE.sigstore.json (what `sigstore sign BUNDLE` writes) or BUNDLE.sig.json (what
 `evo-agents plugin sign` writes), or --signature FILE. Needs evo-ak; a Sigstore signature also needs the sigstore
